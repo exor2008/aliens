@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
 
-from numba import jit
 from bearlibterminal import terminal
 
 from aliens.symbols import *
@@ -190,15 +189,10 @@ class MainMenuState(MenuState):
     def menu_list(self):
         return ['New game', 'Quit']
 
-    # def setup(self):
-    #     super().setup()
-
     def on_new_game(self):
-        print('New game')
         return NewGameState(self.store)
 
     def on_exit(self):
-        print('Exit')
         return
 
 
@@ -221,43 +215,21 @@ class EscMenuState(MenuState):
         return type(self.state)(self.store)
 
     def on_exit(self):
-        print('Exit')
         return InitScreen(self.store)
 
-@jit(nopython=True)
-def fast_iterate(chars_colors):
-    size_x, size_y, _ = chars_colors.shape
-
-    for x in range(size_x):
-        for y in range(size_y):
-            for char, color in chars_colors[x, y].reshape(2, -1).T:
-                yield x, y, char, color
 
 class GameState(State):
     def __init__(self, store):
-        print('GameState')
         super().__init__(store)
         self.handlers += InputHandlers({
             terminal.TK_ESCAPE: self.on_esc,
             })
-    # fuckin slow
+
     def render(self):
-        chars, colors = self.camera.camera.render()
-        # np.dstack([chars, colors])
-
-        terminal.clear()
-        terminal.composition(True)
-        size_x, size_y, _ = chars.shape
-
-        chars_colors = np.dstack([chars, colors])
-        for x, y, char, color in fast_iterate(chars_colors):
-            terminal.color(color)
-            terminal.put(x, y, char)
-        terminal.composition(False)
-        terminal.refresh()
+        self.camera.camera.update_terminal()
 
     def on_exit(self):
-        print('Exit')
+        return
 
     def on_esc(self):
         return EscMenuState(self.store, 25, 25, self, decorated=True)
@@ -266,12 +238,11 @@ class GameState(State):
 class NewGameState(GameState):
     def __init__(self, store):
         super().__init__(store)
-        print('NewGameState')
 
         terminal.clear()
         self._init_world()
-        self._init_floor()
         self._init_camera()
+        self._init_floor()
         self._init_marines()
 
     def run(self):
@@ -289,16 +260,17 @@ class NewGameState(GameState):
         for x in range(size_x):
             for y in range(size_y):
                 floor = Item('Floor', self.world, self.env)
-                floor.add_component(PositionComponent, x, y)
-                floor.add_component(RenderComponent, 0, SYMB_FLOOR, colors.night_blue())
-                floor.add_component(PhysicalComponent, block_pass=False, block_sight=False)
+                floor.add_component(PositionComponent, self.camera, x, y)
+                floor.add_component(RenderComponent, self.camera, 0, SYMB_FLOOR, colors.night_blue())
+                floor.add_component(PhysicalComponent, self.camera, block_pass=False, block_sight=False)
 
     def _init_camera(self):
         self.camera = Item('Camera', self.world, self.env)
-        self.camera.add_component(PositionComponent, 0, 0)
         self.camera.add_component(CameraComponent, 90, 45)
+        self.camera.add_component(PositionComponent, self.camera, 0, 0)
         # self.camera.add_component(RenderComponent, 1, SYMB_CAMERA, colors.white())
-        self.camera.add_component(PhysicalComponent, block_pass=False, block_sight=False)
+        self.camera.add_component(PhysicalComponent, self.camera, block_pass=False, block_sight=False)
+        self.camera.camera.update_requests.full()
         self.store['camera'] = self.camera
 
     def _init_marines(self):
@@ -307,6 +279,8 @@ class NewGameState(GameState):
 
         self.marines.marinesmanager.spawn_marine(100, 100)
         self.marines.marinesmanager.next # init camera
+        self.marines.marinesmanager.spawn_marine(103, 100)
+
         self.store['marines'] = self.marines
 
 
@@ -319,9 +293,8 @@ class MarineControlState(GameState): # MarineControlGameState
         self.render()
 
         self.handlers += InputHandlers({
-            terminal.TK_MOUSE_LEFT|terminal.TK_KEY_RELEASED: self.on_click
+            terminal.TK_MOUSE_LEFT | terminal.TK_KEY_RELEASED: self.on_click
             })
-        print('MarineControlState')
 
     def run(self):
         inpt = None
@@ -333,7 +306,7 @@ class MarineControlState(GameState): # MarineControlGameState
                 return callback()
 
         self.env.step()
-        self.render() # FIXME: do not render every single action
+        self.render()
 
         return self
 
