@@ -14,6 +14,8 @@ from aliens.components import (
     CameraComponent,
     MarinesManagerComponent,
     PhysicalComponent,
+    ActorComponent,
+    HiveComponent,
 )
 
 class StateMashine:
@@ -244,6 +246,8 @@ class NewGameState(GameState):
         self._init_camera()
         self._init_floor()
         self._init_marines()
+        self._init_hive()
+        self._init_aliens()
 
     def run(self):
         return MarineControlState(self.store)
@@ -277,11 +281,28 @@ class NewGameState(GameState):
         self.marines = Item('Marines', self.world, self.env)
         self.marines.add_component(MarinesManagerComponent, self.camera)
 
-        self.marines.marinesmanager.spawn_marine(100, 100)
+        self.marines.marinesmanager.spawn_marine(0, 0)
         self.marines.marinesmanager.next # init camera
         self.marines.marinesmanager.spawn_marine(103, 100)
 
         self.store['marines'] = self.marines
+
+    def _init_hive(self):
+        self.hive = Item('Hive', self.world, self.env)
+        self.hive.add_component(HiveComponent, self.camera)
+        self.hive.add_component(PositionComponent, self.camera, 80, 110)
+        self.hive.add_component(RenderComponent, self.camera, 2, SYMB_HIVE, colors.light_blue())
+        self.hive.add_component(ActorComponent, self.camera)
+        self.hive.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
+
+        self.store['hive'] = self.hive
+
+    def _init_aliens(self):
+        self.hive = self.store['hive']
+        hx, hy = self.hive.position.pos
+
+        for x, y in np.random.randint(-3, 3, size=[4, 2]):
+            self.hive.hive.spawn_alien(hx + x, hy + y)
 
 
 class MarineControlState(GameState): # MarineControlGameState
@@ -314,6 +335,7 @@ class MarineControlState(GameState): # MarineControlGameState
         x = terminal.state(terminal.TK_MOUSE_X)
         y = terminal.state(terminal.TK_MOUSE_Y)
         cx, cy = self.camera.camera.screen_to_cells(x, y)
+        # print('click cell', cx, cy)
 
         marine = self.marines.marinesmanager.current
         marine.navigate.navigate(cx, cy)

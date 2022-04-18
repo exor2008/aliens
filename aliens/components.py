@@ -32,27 +32,71 @@ class PositionComponent(Component):
     def move(self, x, y):
         self.camera.camera.update_requests.move_item(self.item, x, y)
         self.world.move_item(*self.pos, x, y, self.item)
+        self.look(self.item, x, y)
+        
         self.x = x
         self.y = y
-        print(x, y)
+
         for item in self.item.items:
             item.position.move(x, y)
+
+    def look(self, item, x, y):
+        if hasattr(item, 'direction'):
+            item.direction.look(x, y)
 
     @property
     def pos(self):
         return self.x, self.y
 
 
+class DirectionComponent(Component):
+    directions = {
+            (-1, -1): 'dl',
+            (-1, 0): 'l',
+            (-1, 1): 'ul',
+            (0, 1): 'u',
+            (1, 1): 'ur',
+            (1, 0): 'r',
+            (1, -1): 'dr',
+            (0, -1): 'd',
+        }
+
+    def __init__(self, item: Item, camera: Item, direction: str = 'u'):
+        super().__init__(item, camera)
+        self.direction = direction
+
+    def look(self, x, y):
+        ix, iy = self.item.position.pos
+        self.direction = self.directions[(x - ix, y - iy)]
+
+
 class RenderComponent(Component):
+    directions = {
+        'dl': SYMB_DL,
+        'l': SYMB_L,
+        'ul': SYMB_UL,
+        'u': SYMB_U,
+        'ur': SYMB_UR,
+        'r': SYMB_R,
+        'dr': SYMB_DR,
+        'd': SYMB_D,
+        }
+
     def __init__(self, item: Item, camera: Item, layer: int, symbol: int, color: int):
         super().__init__(item, camera)
         self.layer = layer
         self.symbol = symbol
         self._color = color
 
-    def render(self, chars, colors):        
+    def render(self, chars, clrs):
         chars[self.layer] = self.symbol
-        colors[self.layer] = self.color
+        clrs[self.layer] = self.color
+        if hasattr(self.item, 'direction'):
+            chars[self.layer + 1] = self.render_direction()
+            clrs[self.layer + 1] = colors.white()
+
+    def render_direction(self):
+        return self.directions[self.item.direction.direction]
 
     @property
     def color(self):
@@ -101,7 +145,7 @@ class CameraComponent(BaseComponent):
         height = height if height else self.height
 
         x_from, x_to, y_from, y_to = self._frame(width, height)
-        return x + x_from, y + y_from
+        return x + x_from, height - y + y_from
 
     def cells_to_screen(self, x, y, width=None, height=None):
         width = width if width else self.width
@@ -141,6 +185,7 @@ class MarinesManagerComponent(Component):
         marine.add_component(PositionComponent, self.camera, x, y)
         marine.add_component(RenderComponent, self.camera, 1, SYMB_MARINE, colors.predator_green())
         marine.add_component(ActorComponent, self.camera)
+        marine.add_component(DirectionComponent, self.camera)
         marine.add_component(NavigateComponent, self.camera, speed=100.0)
         marine.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
 
@@ -173,6 +218,26 @@ class MarinesManagerComponent(Component):
         self.camera.position.move(*self.current.position.pos)
 
         return self.current
+
+
+class HiveComponent(Component):
+    def __init__(self, item: Item, camera: Item):        
+        super().__init__(item, camera)
+        self.aliens = OrderedDict()
+        self.mass = 0
+
+    def spawn_alien(self, x, y):
+        alien = Item('Alien', self.world, self.env)
+        alien.add_component(PositionComponent, self.camera, x, y)
+        alien.add_component(RenderComponent, self.camera, 1, SYMB_ALIEN, colors.light_blue())
+        alien.add_component(ActorComponent, self.camera)
+        alien.add_component(DirectionComponent, self.camera)
+        alien.add_component(NavigateComponent, self.camera, speed=100.0)
+        alien.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
+
+        self.env.process(IdleTask(alien, priority=10, preempt=False).execute())
+        self.aliens[alien.name] = alien
+        return alien
 
 
 class PhysicalComponent(Component):

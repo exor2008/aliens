@@ -12,7 +12,7 @@ from aliens.symbols import *
 
 
 class World:
-    LAYERS = 2
+    LAYERS = 4
     def __init__(self, size_x, size_y):
         self._init_cells(size_x, size_y)
 

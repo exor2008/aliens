@@ -85,6 +85,6 @@ def fast_iterate(chars_colors):
     size_x, size_y, _ = chars_colors.shape
 
     for x in range(size_x):
-        for y in range(size_y):
-            for char, color in chars_colors[x, y].reshape(2, -1).T:
+        for y, y_flip in zip(range(size_y), range(size_y-1, -1, -1)):
+            for char, color in chars_colors[x, y_flip].reshape(2, -1).T:
                 yield x, y, char, color
