@@ -1,7 +1,8 @@
 from collections import OrderedDict
 
-import numpy as np
+import tcod
 import simpy
+import numpy as np
 
 from aliens import colors
 from aliens.symbols import *
@@ -68,6 +69,16 @@ class DirectionComponent(Component):
     def look(self, x, y):
         ix, iy = self.item.position.pos
         self.direction = self.directions[(x - ix, y - iy)]
+
+
+class FieldOfViewComponent(Component):
+    def __init__(self, item: Item, camera: Item, radius: int):
+        super().__init__(item, camera)
+        self.radius = radius
+
+    def fov(self, mask):
+        x_screen, y_screen = self.camera.camera.cells_to_screen(*self.item.position.pos)
+        return tcod.map.compute_fov(mask, [x_screen, y_screen], radius=self.radius)
 
 
 class RenderComponent(Component):
@@ -145,7 +156,7 @@ class CameraComponent(BaseComponent):
         height = height if height else self.height
 
         x_from, x_to, y_from, y_to = self._frame(width, height)
-        return x + x_from, height - y + y_from
+        return x + x_from, height - y + y_from - 1
 
     def cells_to_screen(self, x, y, width=None, height=None):
         width = width if width else self.width
@@ -153,6 +164,13 @@ class CameraComponent(BaseComponent):
 
         x_from, x_to, y_from, y_to = self._frame(width, height)
         return x - x_from, y - y_from
+
+    def follow(self, item):
+        if self.item.owner:
+            self.item.owner.remove_item(self.item)
+        self.item.owner = item
+        self.item.owner.add_item(self.item)
+        self.item.position.move(*item.position.pos)
 
 
 class NavigateComponent(Component):
@@ -188,6 +206,7 @@ class MarinesManagerComponent(Component):
         marine.add_component(DirectionComponent, self.camera)
         marine.add_component(NavigateComponent, self.camera, speed=100.0)
         marine.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
+        marine.add_component(FieldOfViewComponent, self.camera, radius=45)
 
         self.env.process(IdleTask(marine, priority=10, preempt=False).execute())
         self.marines[marine.name] = marine
@@ -199,23 +218,17 @@ class MarinesManagerComponent(Component):
 
     @property
     def next(self):
-        if self.camera in self.current.items:
-            self.current.items.remove(self.camera)
         self._current += 1
         self._current = min(self._current, len(self.marines) - 1)
-        self.current.items.append(self.camera)
-        self.camera.position.move(*self.current.position.pos)
+        self.camera.camera.follow(self.current)
 
         return self.current
 
     @property
     def prev(self):
-        if self.camera in self.current.items:
-            self.current.items.remove(self.camera)
         self._current -= 1
         self._current = max(self._current, 0)
-        self.current.items.append(self.camera)
-        self.camera.position.move(*self.current.position.pos)
+        self.camera.camera.follow(self.current)
 
         return self.current
 
@@ -234,6 +247,7 @@ class HiveComponent(Component):
         alien.add_component(DirectionComponent, self.camera)
         alien.add_component(NavigateComponent, self.camera, speed=100.0)
         alien.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
+        alien.add_component(FieldOfViewComponent, self.camera, radius=45)
 
         self.env.process(IdleTask(alien, priority=10, preempt=False).execute())
         self.aliens[alien.name] = alien

@@ -18,3 +18,10 @@ class Item:
 
     def __post_init__(self):
         self.name = self.name + uuid.uuid4().hex[:5]
+
+    def add_item(self, item):
+        self.items.append(item)
+
+    def remove_item(self, item):
+        if item in self.items:
+            self.items.remove(item)

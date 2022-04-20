@@ -281,7 +281,7 @@ class NewGameState(GameState):
         self.marines = Item('Marines', self.world, self.env)
         self.marines.add_component(MarinesManagerComponent, self.camera)
 
-        self.marines.marinesmanager.spawn_marine(0, 0)
+        self.marines.marinesmanager.spawn_marine(50, 100)
         self.marines.marinesmanager.next # init camera
         self.marines.marinesmanager.spawn_marine(103, 100)
 

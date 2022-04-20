@@ -31,12 +31,15 @@ class FullTerminalUpdate(TerminalUpdate):
         chars = np.full([width, height, self.world.LAYERS], SYMB_EMPTY, dtype=int)
         clrs = np.full([width, height, self.world.LAYERS], colors.transparent(), dtype=np.longlong)
 
+        fov = self.fov()
+
         for x in np.arange(x_from, x_to):
             for y in np.arange(y_from, y_to):
-                if self.world.is_cell(x, y):
+                x_screen, y_screen = self.camera.cells_to_screen(x, y)
+                if self.world.is_cell(x, y) and fov[x_screen, y_screen]:
                     cell_chars, cell_colors = self.world.cells[x, y].render()
-                    chars[x - x_from, y - y_from] = cell_chars
-                    clrs[x - x_from, y - y_from] = cell_colors
+                    chars[x_screen, y_screen] = cell_chars
+                    clrs[x_screen, y_screen] = cell_colors
 
         return chars, clrs
 
@@ -55,6 +58,14 @@ class FullTerminalUpdate(TerminalUpdate):
         terminal.refresh()
 
         self.need_update = False
+
+    def fov(self):
+        if owner := self.camera.item.owner:
+            if hasattr(owner, 'fieldofview'):
+                mask = self.world.sight_mask(self.camera)
+                return owner.fieldofview.fov(mask)
+        return np.ones([self.camera.width, self.camera.height])
+        
 
 
 class UpdateRequests:
