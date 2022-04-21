@@ -270,7 +270,9 @@ class NewGameState(GameState):
 
     def _init_camera(self):
         self.camera = Item('Camera', self.world, self.env)
-        self.camera.add_component(CameraComponent, 90, 45)
+        width = terminal.state(terminal.TK_WIDTH)
+        height = terminal.state(terminal.TK_HEIGHT)
+        self.camera.add_component(CameraComponent, width, height)
         self.camera.add_component(PositionComponent, self.camera, 0, 0)
         # self.camera.add_component(RenderComponent, 1, SYMB_CAMERA, colors.white())
         self.camera.add_component(PhysicalComponent, self.camera, block_pass=False, block_sight=False)

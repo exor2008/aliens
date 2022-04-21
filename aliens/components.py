@@ -3,6 +3,7 @@ from collections import OrderedDict
 import tcod
 import simpy
 import numpy as np
+from bearlibterminal import terminal
 
 from aliens import colors
 from aliens.symbols import *
@@ -62,13 +63,70 @@ class DirectionComponent(Component):
             (0, -1): 'd',
         }
 
+    @property
+    def masks(self):
+        return {
+            'dl': lambda arr: self.down_left(arr),
+            'l': lambda arr: self.left(arr),
+            'ul': lambda arr: self.up_left(arr),
+            'u': lambda arr: self.up(arr),
+            'ur': lambda arr: self.up_right(arr),
+            'r': lambda arr: self.right(arr),
+            'dr': lambda arr: self.down_right(arr),
+            'd': lambda arr: self.down(arr),
+        }
+
     def __init__(self, item: Item, camera: Item, direction: str = 'u'):
         super().__init__(item, camera)
+        self.width = terminal.state(terminal.TK_WIDTH)
+        self.height = terminal.state(terminal.TK_HEIGHT)
+        self.offset = - ((self.width - self.height) // 2 + 2)
+        if self.offset > 0:
+            self.offset += 1
         self.direction = direction
 
     def look(self, x, y):
         ix, iy = self.item.position.pos
         self.direction = self.directions[(x - ix, y - iy)]
+
+    def mask(self, arr):
+        return self.masks[self.direction](arr)
+        
+    def up(self, arr):
+        mask = arr.astype(bool)
+        to = int(round(mask.shape[1] / 2)) + 1
+        mask[:, :to] = False
+        return mask
+        
+    def down(self, arr):
+        mask = arr.astype(bool)
+        from_ = int(round(mask.shape[1] / 2))
+        mask[:, from_:] = False
+        return mask
+            
+    def left(self, arr):
+        mask = arr.astype(bool)
+        from_ = int(round(mask.shape[0] / 2))
+        mask[from_:] = False
+        return mask
+        
+    def right(self, arr):
+        mask = arr.astype(bool)
+        to = int(round(mask.shape[0] / 2)) + 1
+        mask[:to] = False
+        return mask
+
+    def down_right(self, arr):
+        return np.tri(*arr.shape, self.offset, dtype=bool)
+
+    def down_left(self, arr):
+        return np.flipud(np.tri(*arr.shape, self.offset + 1, dtype=bool))
+
+    def up_right(self, arr):
+        return np.fliplr(np.tri(*arr.shape, self.offset, dtype=bool))
+
+    def up_left(self, arr):
+        return np.flipud(np.fliplr(np.tri(*arr.shape, self.offset + 1, dtype=bool)))
 
 
 class FieldOfViewComponent(Component):
@@ -134,12 +192,12 @@ class CameraComponent(BaseComponent):
         if updater := self.update_requests.get_updater():
             updater.update()
 
-    def _frame(self, width, height):
+    def _frame(self, width, height):        
         x, y = self.item.position.pos
 
-        x_from = x - width // 2
+        x_from = x - int(round(width / 2))
         x_to = x_from + width
-        y_from = y - height // 2
+        y_from = y - int(round(height / 2))
         y_to = y_from + height
 
         return x_from, x_to, y_from, y_to

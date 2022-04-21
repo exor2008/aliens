@@ -63,6 +63,8 @@ class FullTerminalUpdate(TerminalUpdate):
         if owner := self.camera.item.owner:
             if hasattr(owner, 'fieldofview'):
                 mask = self.world.sight_mask(self.camera)
+                if hasattr(owner, 'direction'):
+                    mask &= owner.direction.mask(mask)
                 return owner.fieldofview.fov(mask)
         return np.ones([self.camera.width, self.camera.height])
         
