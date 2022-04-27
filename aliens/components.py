@@ -87,46 +87,76 @@ class DirectionComponent(Component):
 
     def look(self, x, y):
         ix, iy = self.item.position.pos
-        self.direction = self.directions[(x - ix, y - iy)]
+        look_x = np.clip(x - ix, -1, 1)
+        look_y = np.clip(y - iy, -1, 1)
+        self.direction = self.directions[(look_x, look_y)]
 
     def mask(self, arr):
         return self.masks[self.direction](arr)
         
     def up(self, arr):
         mask = arr.astype(bool)
-        to = int(round(mask.shape[1] / 2)) + 1
+        to = int(round(mask.shape[1] / 2)) + 1 - self.shift[1]
         mask[:, :to] = False
         return mask
         
     def down(self, arr):
         mask = arr.astype(bool)
-        from_ = int(round(mask.shape[1] / 2))
+        from_ = int(round(mask.shape[1] / 2)) - self.shift[1]
         mask[:, from_:] = False
         return mask
             
     def left(self, arr):
         mask = arr.astype(bool)
-        from_ = int(round(mask.shape[0] / 2))
+        from_ = int(round(mask.shape[0] / 2)) + self.shift[0]
         mask[from_:] = False
         return mask
         
     def right(self, arr):
         mask = arr.astype(bool)
-        to = int(round(mask.shape[0] / 2)) + 1
+        to = int(round(mask.shape[0] / 2)) + 1 + self.shift[0]
         mask[:to] = False
         return mask
 
     def down_right(self, arr):
-        return np.tri(*arr.shape, self.offset, dtype=bool)
+        mask = arr.astype(bool)
+        offset = self.offset - (self.shift[0] + self.shift[1])
+        visible = np.tri(*arr.shape, offset, dtype=bool)
+        mask[~visible] = False
+        return mask
 
     def down_left(self, arr):
-        return np.flipud(np.tri(*arr.shape, self.offset + 1, dtype=bool))
+        mask = arr.astype(bool)
+        offset = self.offset - (self.shift[1] - self.shift[0])
+        visible = np.flipud(np.tri(*arr.shape, offset + 1, dtype=bool))
+        mask[~visible] = False
+        return mask
 
     def up_right(self, arr):
-        return np.fliplr(np.tri(*arr.shape, self.offset, dtype=bool))
+        mask = arr.astype(bool)
+        offset = self.offset - (self.shift[0] - self.shift[1])
+        visible = np.fliplr(np.tri(*arr.shape, offset, dtype=bool))
+        mask[~visible] = False
+        return mask
 
     def up_left(self, arr):
-        return np.flipud(np.fliplr(np.tri(*arr.shape, self.offset + 1, dtype=bool)))
+        mask = arr.astype(bool)
+        offset = self.offset + self.shift[0] + self.shift[1] + 1
+        visible = np.flipud(np.fliplr(np.tri(*arr.shape, offset, dtype=bool)))
+        mask[~visible] = False
+        return mask
+
+    @property
+    def shift(self):
+        cx, cy = self.camera.camera.cells_to_screen(*self.camera.position.pos)
+        x, y = self.camera.camera.cells_to_screen(*self.item.position.pos)
+        return x - cx, cy - y
+
+    @property
+    def shift_diag(self):
+        cx, cy = self.camera.camera.cells_to_screen(*self.camera.position.pos)
+        x, y = self.camera.camera.cells_to_screen(*self.item.position.pos)
+        return x - cx, -(y - cy)
 
 
 class FieldOfViewComponent(Component):
@@ -188,9 +218,9 @@ class CameraComponent(BaseComponent):
         self.colors = None
         self.update_requests = UpdateRequests(self.world, self)
 
-    def update_terminal(self):
+    def update_terminal(self, observers):
         if updater := self.update_requests.get_updater():
-            updater.update()
+            updater.update(observers)
 
     def _frame(self, width, height):        
         x, y = self.item.position.pos
@@ -256,15 +286,15 @@ class MarinesManagerComponent(Component):
         self.marines = OrderedDict()
         self._current = 0
 
-    def spawn_marine(self, x, y):
+    def spawn_marine(self, x, y, direction='u'):
         marine = Item('Marine', self.world, self.env)
         marine.add_component(PositionComponent, self.camera, x, y)
         marine.add_component(RenderComponent, self.camera, 1, SYMB_MARINE, colors.predator_green())
         marine.add_component(ActorComponent, self.camera)
-        marine.add_component(DirectionComponent, self.camera)
+        marine.add_component(DirectionComponent, self.camera, direction=direction)
         marine.add_component(NavigateComponent, self.camera, speed=100.0)
         marine.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
-        marine.add_component(FieldOfViewComponent, self.camera, radius=45)
+        marine.add_component(FieldOfViewComponent, self.camera, radius=100)
 
         self.env.process(IdleTask(marine, priority=10, preempt=False).execute())
         self.marines[marine.name] = marine

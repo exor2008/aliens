@@ -7,6 +7,7 @@ from bearlibterminal import terminal
 from aliens.symbols import *
 from aliens import colors
 
+
 class TerminalUpdate(ABC):
     def __init__(self, world, camera):
         self.world = world
@@ -22,7 +23,7 @@ class TerminalUpdate(ABC):
 
 
 class FullTerminalUpdate(TerminalUpdate):
-    def render(self):
+    def render(self, observers):
         width = self.camera.width
         height = self.camera.height
 
@@ -31,7 +32,11 @@ class FullTerminalUpdate(TerminalUpdate):
         chars = np.full([width, height, self.world.LAYERS], SYMB_EMPTY, dtype=int)
         clrs = np.full([width, height, self.world.LAYERS], colors.transparent(), dtype=np.longlong)
 
-        fov = self.fov()
+        observers_in_frame = filter(
+            lambda observer: self.camera.in_frame(*observer.position.pos),
+            observers)
+
+        fov = self.fov(observers_in_frame)
 
         for x in np.arange(x_from, x_to):
             for y in np.arange(y_from, y_to):
@@ -43,8 +48,8 @@ class FullTerminalUpdate(TerminalUpdate):
 
         return chars, clrs
 
-    def update(self):
-        chars, colors = self.render()
+    def update(self, observers):
+        chars, colors = self.render(observers)
 
         terminal.clear()
         terminal.composition(True)
@@ -59,15 +64,22 @@ class FullTerminalUpdate(TerminalUpdate):
 
         self.need_update = False
 
-    def fov(self):
-        if owner := self.camera.item.owner:
-            if hasattr(owner, 'fieldofview'):
-                mask = self.world.sight_mask(self.camera)
-                if hasattr(owner, 'direction'):
-                    mask &= owner.direction.mask(mask)
-                return owner.fieldofview.fov(mask)
-        return np.ones([self.camera.width, self.camera.height])
-        
+    def fov(self, observers):
+        if not observers:
+            return np.full([self.camera.width, self.camera.height], True)
+
+        fov = np.full([self.camera.width, self.camera.height], False)
+        mask = self.world.sight_mask(self.camera)
+
+        for observer in observers:
+            if hasattr(observer, 'direction'):
+                obs_mask = observer.direction.mask(mask)
+            else:
+                obs_mask = np.full([self.camera.width, self.camera.height], True)
+
+            if hasattr(observer, 'fieldofview'):
+                fov |= observer.fieldofview.fov(obs_mask)
+        return fov
 
 
 class UpdateRequests:

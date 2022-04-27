@@ -227,8 +227,8 @@ class GameState(State):
             terminal.TK_ESCAPE: self.on_esc,
             })
 
-    def render(self):
-        self.camera.camera.update_terminal()
+    def render(self, observers):
+        self.camera.camera.update_terminal(observers)
 
     def on_exit(self):
         return
@@ -283,9 +283,16 @@ class NewGameState(GameState):
         self.marines = Item('Marines', self.world, self.env)
         self.marines.add_component(MarinesManagerComponent, self.camera)
 
-        self.marines.marinesmanager.spawn_marine(50, 100)
+        self.marines.marinesmanager.spawn_marine(70, 80)
         self.marines.marinesmanager.next # init camera
-        self.marines.marinesmanager.spawn_marine(103, 100)
+        self.marines.marinesmanager.spawn_marine(100, 100, direction='ul')
+        self.marines.marinesmanager.spawn_marine(100, 120, direction='ur')
+        self.marines.marinesmanager.spawn_marine(120, 100, direction='dl')
+        self.marines.marinesmanager.spawn_marine(120, 120, direction='dr')
+        self.marines.marinesmanager.spawn_marine(80, 80, direction='r')
+        self.marines.marinesmanager.spawn_marine(60, 80, direction='l')
+        self.marines.marinesmanager.spawn_marine(80, 60, direction='u')
+        self.marines.marinesmanager.spawn_marine(60, 60, direction='d')
 
         self.store['marines'] = self.marines
 
@@ -313,7 +320,8 @@ class MarineControlState(GameState): # MarineControlGameState
         self.camera = store['camera']
         self.env = store['env']
         self.marines = store['marines']
-        self.render()
+        marines_list = self.marines.marinesmanager.marines.values()
+        self.render(marines_list)
 
         self.handlers += InputHandlers({
             terminal.TK_MOUSE_LEFT | terminal.TK_KEY_RELEASED: self.on_click
@@ -329,7 +337,9 @@ class MarineControlState(GameState): # MarineControlGameState
                 return callback()
 
         self.env.step()
-        self.render()
+
+        marines_list = self.marines.marinesmanager.marines.values()
+        self.render(marines_list)
 
         return self
 
@@ -337,7 +347,6 @@ class MarineControlState(GameState): # MarineControlGameState
         x = terminal.state(terminal.TK_MOUSE_X)
         y = terminal.state(terminal.TK_MOUSE_Y)
         cx, cy = self.camera.camera.screen_to_cells(x, y)
-        # print('click cell', cx, cy)
 
         marine = self.marines.marinesmanager.current
         marine.navigate.navigate(cx, cy)
