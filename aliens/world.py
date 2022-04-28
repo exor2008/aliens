@@ -68,18 +68,15 @@ class World:
                     mask[i, j] = 0
         return mask
 
-    def sight_mask(self, camera):
-        width = camera.width
-        height = camera.height
-
-        x_from, x_to, y_from, y_to = camera._frame(width, height)
+    def sight_mask(self, x_from, x_to, y_from, y_to):
+        width = x_to - x_from
+        height = y_to - y_from
         mask = np.ones([width, height], dtype=bool)
         for x in range(x_from, x_to):
             for y in range(y_from, y_to):
                 if self.is_cell(x, y):
                     if self.cells[x, y].is_block_sight():
-                        x_screen, y_screen = camera.cells_to_screen(x, y)
-                        mask[x_screen, y_screen] = 0
+                        mask[x - x_from, y - y_from] = 0
         return mask
 
     @property

@@ -66,14 +66,14 @@ class DirectionComponent(Component):
     @property
     def masks(self):
         return {
-            'dl': lambda arr: self.down_left(arr),
-            'l': lambda arr: self.left(arr),
-            'ul': lambda arr: self.up_left(arr),
-            'u': lambda arr: self.up(arr),
-            'ur': lambda arr: self.up_right(arr),
-            'r': lambda arr: self.right(arr),
-            'dr': lambda arr: self.down_right(arr),
-            'd': lambda arr: self.down(arr),
+            'dl': self.down_left,
+            'l': self.left,
+            'ul': self.up_left,
+            'u': self.up,
+            'ur': self.up_right,
+            'r': self.right,
+            'dr': self.down_right,
+            'd': self.down,
         }
 
     def __init__(self, item: Item, camera: Item, direction: str = 'u'):
@@ -91,57 +91,65 @@ class DirectionComponent(Component):
         look_y = np.clip(y - iy, -1, 1)
         self.direction = self.directions[(look_x, look_y)]
 
-    def mask(self, arr):
-        return self.masks[self.direction](arr)
+    def mask(self, arr, camera_relative=True):
+        return self.masks[self.direction](arr, camera_relative)
         
-    def up(self, arr):
+    def up(self, arr, camera_relative):
         mask = arr.astype(bool)
-        to = int(round(mask.shape[1] / 2)) + 1 - self.shift[1]
+        shift = self.shift if camera_relative else (0, 0)
+        to = int(round(mask.shape[1] / 2)) + 1 - shift[1]
         mask[:, :to] = False
         return mask
         
-    def down(self, arr):
+    def down(self, arr, camera_relative):
         mask = arr.astype(bool)
-        from_ = int(round(mask.shape[1] / 2)) - self.shift[1]
+        shift = self.shift if camera_relative else (0, 0)
+        from_ = int(round(mask.shape[1] / 2)) - shift[1]
         mask[:, from_:] = False
         return mask
             
-    def left(self, arr):
+    def left(self, arr, camera_relative):
         mask = arr.astype(bool)
-        from_ = int(round(mask.shape[0] / 2)) + self.shift[0]
+        shift = self.shift if camera_relative else (0, 0)
+        from_ = int(round(mask.shape[0] / 2)) + shift[0]
         mask[from_:] = False
         return mask
         
-    def right(self, arr):
+    def right(self, arr, camera_relative):
         mask = arr.astype(bool)
-        to = int(round(mask.shape[0] / 2)) + 1 + self.shift[0]
+        shift = self.shift if camera_relative else (0, 0)
+        to = int(round(mask.shape[0] / 2)) + 1 + shift[0]
         mask[:to] = False
         return mask
 
-    def down_right(self, arr):
+    def down_right(self, arr, camera_relative):
         mask = arr.astype(bool)
-        offset = self.offset - (self.shift[0] + self.shift[1])
+        shift = self.shift if camera_relative else (0, 0)
+        offset = self.offset - (shift[0] + shift[1])
         visible = np.tri(*arr.shape, offset, dtype=bool)
         mask[~visible] = False
         return mask
 
-    def down_left(self, arr):
+    def down_left(self, arr, camera_relative):
         mask = arr.astype(bool)
-        offset = self.offset - (self.shift[1] - self.shift[0])
+        shift = self.shift if camera_relative else (0, 0)
+        offset = self.offset - (shift[1] - shift[0])
         visible = np.flipud(np.tri(*arr.shape, offset + 1, dtype=bool))
         mask[~visible] = False
         return mask
 
-    def up_right(self, arr):
+    def up_right(self, arr, camera_relative):
         mask = arr.astype(bool)
-        offset = self.offset - (self.shift[0] - self.shift[1])
+        shift = self.shift if camera_relative else (0, 0)
+        offset = self.offset - (shift[0] - shift[1])
         visible = np.fliplr(np.tri(*arr.shape, offset, dtype=bool))
         mask[~visible] = False
         return mask
 
-    def up_left(self, arr):
+    def up_left(self, arr, camera_relative):
         mask = arr.astype(bool)
-        offset = self.offset + self.shift[0] + self.shift[1] + 1
+        shift = self.shift if camera_relative else (0, 0)
+        offset = self.offset + shift[0] + shift[1] + 1
         visible = np.flipud(np.fliplr(np.tri(*arr.shape, offset, dtype=bool)))
         mask[~visible] = False
         return mask
@@ -152,21 +160,18 @@ class DirectionComponent(Component):
         x, y = self.camera.camera.cells_to_screen(*self.item.position.pos)
         return x - cx, cy - y
 
-    @property
-    def shift_diag(self):
-        cx, cy = self.camera.camera.cells_to_screen(*self.camera.position.pos)
-        x, y = self.camera.camera.cells_to_screen(*self.item.position.pos)
-        return x - cx, -(y - cy)
-
 
 class FieldOfViewComponent(Component):
     def __init__(self, item: Item, camera: Item, radius: int):
         super().__init__(item, camera)
         self.radius = radius
 
-    def fov(self, mask):
-        x_screen, y_screen = self.camera.camera.cells_to_screen(*self.item.position.pos)
-        return tcod.map.compute_fov(mask, [x_screen, y_screen], radius=self.radius)
+    def fov(self, mask, camera_relative=True):
+        if camera_relative:
+            x, y = self.camera.camera.cells_to_screen(*self.item.position.pos)
+        else:
+            x, y = mask.shape[0] // 2, mask.shape[1] // 2
+        return tcod.map.compute_fov(mask, [x, y], radius=self.radius)
 
 
 class RenderComponent(Component):
@@ -327,15 +332,17 @@ class HiveComponent(Component):
         self.aliens = OrderedDict()
         self.mass = 0
 
-    def spawn_alien(self, x, y):
-        alien = Item('Alien', self.world, self.env)
+    def spawn_alien_drone(self, x, y):
+        alien = Item('AlienDrone', self.world, self.env)
         alien.add_component(PositionComponent, self.camera, x, y)
         alien.add_component(RenderComponent, self.camera, 1, SYMB_ALIEN, colors.light_blue())
         alien.add_component(ActorComponent, self.camera)
         alien.add_component(DirectionComponent, self.camera)
         alien.add_component(NavigateComponent, self.camera, speed=100.0)
         alien.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
-        alien.add_component(FieldOfViewComponent, self.camera, radius=45)
+        alien.add_component(FieldOfViewComponent, self.camera, radius=100)
+        # sensor component
+        #los component
 
         self.env.process(IdleTask(alien, priority=10, preempt=False).execute())
         self.aliens[alien.name] = alien
@@ -348,4 +355,7 @@ class PhysicalComponent(Component):
         self.block_pass = block_pass
         self.block_sight = block_sight
 
-# states items[components], task
+
+class AlienDroneComponent(Component):
+    def __init__(self, item: Item, camera: Item):
+        super().__init__(item, camera)

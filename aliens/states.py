@@ -311,7 +311,7 @@ class NewGameState(GameState):
         hx, hy = self.hive.position.pos
 
         for x, y in np.random.randint(-3, 3, size=[4, 2]):
-            self.hive.hive.spawn_alien(hx + x, hy + y)
+            self.hive.hive.spawn_alien_drone(hx + x, hy + y)
 
 
 class MarineControlState(GameState): # MarineControlGameState

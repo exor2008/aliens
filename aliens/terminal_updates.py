@@ -69,7 +69,9 @@ class FullTerminalUpdate(TerminalUpdate):
             return np.full([self.camera.width, self.camera.height], True)
 
         fov = np.full([self.camera.width, self.camera.height], False)
-        mask = self.world.sight_mask(self.camera)
+
+        x_from, x_to, y_from, y_to = self.camera._frame(self.camera.width, self.camera.height)
+        mask = self.world.sight_mask(x_from, x_to, y_from, y_to)
 
         for observer in observers:
             if hasattr(observer, 'direction'):
