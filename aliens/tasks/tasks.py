@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from functools import wraps
 
 import simpy
@@ -17,6 +17,10 @@ class Task(ABC):
         self.preempt = preempt        
         self.actor = item.actor.actor
 
+    @abstractmethod
+    def execute(self):
+        pass
+
 
 class GoToTask(Task):
     def __init__(self, item: Item, target_x: int, target_y: int, priority, preempt: bool = True):
@@ -30,15 +34,15 @@ class GoToTask(Task):
             try:
                 yield req
                 current_x, current_y = self.item.position.pos
-                while (self.target_x, self.target_y) != (current_x, current_y):
-                    for current_x, current_y in self.next_dest():
-                            yield self.env.process(self._walk(current_x, current_y))
+                try:
+                    while (self.target_x, self.target_y) != (current_x, current_y):
+                        for current_x, current_y in self.next_dest():
+                            yield self.env.process(
+                                MoveTask(self.item, current_x, current_y).execute())
+                except UnreachableDestination:
+                    pass
             except simpy.Interrupt as interrupt:
                 pass
-
-    def _walk(self, x, y):
-        yield self.env.timeout(1 / self.item.navigate.speed)
-        self.item.position.move(x, y)
 
     @property
     def path(self):
@@ -50,10 +54,12 @@ class GoToTask(Task):
                 self.target_x,
                 self.target_y)
             self._path = np.asarray(_path)
+            if self._path.size == 0:
+                raise UnreachableDestination(
+                    self.item.position.x, self.item.position.y)
         return self._path
 
     def next_dest(self):
-        # TODO: if dest is unreachable?
         for x, y in self.path:
             if self.world.cells[x, y].is_block_pass():
                 self._path = None
@@ -71,3 +77,26 @@ class IdleTask(Task):
                     yield self.env.timeout(100.0)
             except simpy.Interrupt as interrupt:
                 self.env.process(self.execute())
+
+
+class MoveTask(Task):
+    def __init__(self, item: Item, target_x: int, target_y: int, priority: int = 10, preempt: bool = True):
+        super().__init__(item, priority, preempt)
+        self.target_x = target_x
+        self.target_y = target_y
+
+    def execute(self):
+        try:
+            yield self.env.timeout(1 / self.item.navigate.speed)
+            self.item.position.move(self.target_x, self.target_y)
+        except simpy.Interrupt:
+            pass
+
+
+class UnreachableDestination(Exception):
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __str__(self):
+        return f"[{self.x} {self.y}] is unreachable destination"

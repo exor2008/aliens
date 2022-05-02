@@ -8,7 +8,7 @@ from bearlibterminal import terminal
 from aliens import colors
 from aliens.symbols import *
 from aliens.items import Item
-from aliens.tasks import GoToTask, IdleTask
+from aliens.tasks.tasks import GoToTask, IdleTask
 from aliens.terminal_updates import UpdateRequests
 
 class BaseComponent:
@@ -52,7 +52,7 @@ class PositionComponent(Component):
 
 
 class DirectionComponent(Component):
-    directions = {
+    directions = OrderedDict({
             (-1, -1): 'dl',
             (-1, 0): 'l',
             (-1, 1): 'ul',
@@ -61,7 +61,29 @@ class DirectionComponent(Component):
             (1, 0): 'r',
             (1, -1): 'dr',
             (0, -1): 'd',
+        })
+
+    oppositions = {
+            'ur': 'dl',
+            'r': 'l',
+            'dr': 'ul',
+            'd': 'u',
+            'dl': 'ur',
+            'l': 'r',
+            'ul': 'dr',
+            'u': 'd',
         }
+
+    cells_offsets = OrderedDict({
+            'dl': (-1, -1),
+            'l': (-1, 0),
+            'ul': (-1, 1),
+            'u': (0, 1),
+            'ur': (1, 1),
+            'r': (1, 0),
+            'dr': (1, -1),
+            'd': (0, -1),
+        })
 
     @property
     def masks(self):
@@ -154,24 +176,70 @@ class DirectionComponent(Component):
         mask[~visible] = False
         return mask
 
+    def turn_cw(self):
+        self.direction = self.cw
+
+    def turn_ccw(self):
+        self.direction = self.ccw
+
+    def turn_opposite(self):
+        self.direction = self.opposite
+
     @property
     def shift(self):
         cx, cy = self.camera.camera.cells_to_screen(*self.camera.position.pos)
         x, y = self.camera.camera.cells_to_screen(*self.item.position.pos)
         return x - cx, cy - y
 
+    @property
+    def opposite(self):
+        return self.opposite[self.direction]
+
+    @property
+    def cw(self):
+        directions = list(directions.values())
+        current = directions.index(self.direction)
+        current += 1
+        if current >= len(directions):
+            current = 0
+        return directions[current]
+
+    @property
+    def ccw(self):
+        directions = list(directions.values())
+        current = directions.index(self.direction)
+        current -= 1
+        if current < 0:
+            current = len(directions) - 1
+        return directions[current]
+
+    @property
+    def cell_offset(self):
+        return self.cells_offsets[self.direction]
 
 class FieldOfViewComponent(Component):
     def __init__(self, item: Item, camera: Item, radius: int):
         super().__init__(item, camera)
         self.radius = radius
 
-    def fov(self, mask, camera_relative=True):
+    def _fov(self, mask, camera_relative=True):
         if camera_relative:
             x, y = self.camera.camera.cells_to_screen(*self.item.position.pos)
         else:
             x, y = mask.shape[0] // 2, mask.shape[1] // 2
         return tcod.map.compute_fov(mask, [x, y], radius=self.radius)
+
+    def fov(self, sight_mask=None, camera_relative=True):
+        x_from, x_to, y_from, y_to = self.camera.camera._frame(self.camera.camera.width, self.camera.camera.height)
+        mask = sight_mask if sight_mask is not None else \
+            self.world.sight_mask(x_from, x_to, y_from, y_to)
+
+        if hasattr(self.item, 'direction'):
+            obs_mask = self.item.direction.mask(mask, camera_relative=camera_relative)
+        else:
+            obs_mask = np.full([self.camera.camera.width, self.camera.camera.height], True)
+
+        return self._fov(obs_mask, camera_relative=camera_relative)
 
 
 class RenderComponent(Component):
@@ -342,7 +410,7 @@ class HiveComponent(Component):
         alien.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
         alien.add_component(FieldOfViewComponent, self.camera, radius=100)
         # sensor component
-        #los component
+        # los component
 
         self.env.process(IdleTask(alien, priority=10, preempt=False).execute())
         self.aliens[alien.name] = alien
@@ -359,3 +427,11 @@ class PhysicalComponent(Component):
 class AlienDroneComponent(Component):
     def __init__(self, item: Item, camera: Item):
         super().__init__(item, camera)
+
+
+class SensorComponent(Component):
+    def __init__(self, item: Item, camera: Item):
+        super().__init__(item, camera)
+
+    def scan(self, component):
+        pass

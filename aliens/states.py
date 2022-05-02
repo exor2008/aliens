@@ -314,13 +314,14 @@ class NewGameState(GameState):
             self.hive.hive.spawn_alien_drone(hx + x, hy + y)
 
 
-class MarineControlState(GameState): # MarineControlGameState
+class MarineControlState(GameState):
     def __init__(self, store):
         super().__init__(store)
         self.camera = store['camera']
         self.env = store['env']
         self.marines = store['marines']
         marines_list = self.marines.marinesmanager.marines.values()
+        self.camera.camera.update_requests.full()
         self.render(marines_list)
 
         self.handlers += InputHandlers({

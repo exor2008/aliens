@@ -87,6 +87,9 @@ class World:
         return 0 <= x < self.cells.shape[0] and \
             0 <= y < self.cells.shape[1]
 
+    def is_block_pass(self, x, y):
+        return not self.is_cell(x, y) and self.cells[x, y].is_block_pass()
+
 
 @dataclass(repr=False)
 class Cell:

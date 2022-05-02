@@ -74,13 +74,7 @@ class FullTerminalUpdate(TerminalUpdate):
         mask = self.world.sight_mask(x_from, x_to, y_from, y_to)
 
         for observer in observers:
-            if hasattr(observer, 'direction'):
-                obs_mask = observer.direction.mask(mask)
-            else:
-                obs_mask = np.full([self.camera.width, self.camera.height], True)
-
-            if hasattr(observer, 'fieldofview'):
-                fov |= observer.fieldofview.fov(obs_mask)
+            fov |= observer.fieldofview.fov(mask)
         return fov
 
 
