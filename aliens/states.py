@@ -248,12 +248,13 @@ class NewGameState(GameState):
         self._init_marines()
         self._init_hive()
         self._init_aliens()
+        self._init_resources()
 
     def run(self):
         return MarineControlState(self.store)
 
     def _init_world(self):
-        self.world = World(200, 200)
+        self.world = World(100, 100)
         self.env = StoppableRealtimeEnvironment(strict=False)
 
         self.store['world'] = self.world
@@ -283,23 +284,23 @@ class NewGameState(GameState):
         self.marines = Item('Marines', self.world, self.env)
         self.marines.add_component(MarinesManagerComponent, self.camera)
 
-        self.marines.marinesmanager.spawn_marine(70, 80)
+        self.marines.marinesmanager.spawn_marine(10, 10)
         self.marines.marinesmanager.next # init camera
-        self.marines.marinesmanager.spawn_marine(100, 100, direction='ul')
-        self.marines.marinesmanager.spawn_marine(100, 120, direction='ur')
-        self.marines.marinesmanager.spawn_marine(120, 100, direction='dl')
-        self.marines.marinesmanager.spawn_marine(120, 120, direction='dr')
-        self.marines.marinesmanager.spawn_marine(80, 80, direction='r')
-        self.marines.marinesmanager.spawn_marine(60, 80, direction='l')
-        self.marines.marinesmanager.spawn_marine(80, 60, direction='u')
-        self.marines.marinesmanager.spawn_marine(60, 60, direction='d')
+        self.marines.marinesmanager.spawn_marine(30, 70, direction='ul')
+        # self.marines.marinesmanager.spawn_marine(100, 120, direction='ur')
+        # self.marines.marinesmanager.spawn_marine(120, 100, direction='dl')
+        # self.marines.marinesmanager.spawn_marine(120, 120, direction='dr')
+        # self.marines.marinesmanager.spawn_marine(80, 80, direction='r')
+        # self.marines.marinesmanager.spawn_marine(60, 80, direction='l')
+        # self.marines.marinesmanager.spawn_marine(80, 60, direction='u')
+        # self.marines.marinesmanager.spawn_marine(60, 60, direction='d')
 
         self.store['marines'] = self.marines
 
     def _init_hive(self):
         self.hive = Item('Hive', self.world, self.env)
         self.hive.add_component(HiveComponent, self.camera)
-        self.hive.add_component(PositionComponent, self.camera, 80, 110)
+        self.hive.add_component(PositionComponent, self.camera, 20, 20)
         self.hive.add_component(RenderComponent, self.camera, 2, SYMB_HIVE, colors.light_blue())
         self.hive.add_component(ActorComponent, self.camera)
         self.hive.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
@@ -310,8 +311,11 @@ class NewGameState(GameState):
         self.hive = self.store['hive']
         hx, hy = self.hive.position.pos
 
-        for x, y in np.random.randint(-3, 3, size=[4, 2]):
+        for x, y in np.random.randint(-3, 3, size=[1, 2]):
             self.hive.hive.spawn_alien_drone(hx + x, hy + y)
+
+    def _init_resources(self):
+        self.hive.hive.spawn_resource(20, 40)
 
 
 class MarineControlState(GameState):

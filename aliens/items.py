@@ -17,7 +17,7 @@ class Item:
         setattr(self, name, Component(self, *args, **kwargs))
 
     def __post_init__(self):
-        self.name = self.name + uuid.uuid4().hex[:5]
+        self.name = '_'.join([self.name, uuid.uuid4().hex[:5]])
 
     def add_item(self, item):
         self.items.append(item)

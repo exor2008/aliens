@@ -11,7 +11,7 @@ class CollectResourceTask(Task):
 class RoamTask(Task):
     def execute(self):
         try:
-            return self.env.process(MoveTask(*self.next_dest()).execute())
+            self.env.process(MoveTask(*self.next_dest()).execute())
         except simpy.Interrupt:
             pass
 
@@ -42,7 +42,14 @@ class RoamTask(Task):
 
 class SearchResourceTask(Task):
     def execute(self):
-        pass
+        try:
+            while True:
+                yield self.env.timeout(5)
+                res = self.item.sensor.scan('alienresource')
+                if res:
+                    return res
+        except simpy.Interrupt:
+            pass
 
 
 class GoToResourceTask(Task):

@@ -27,7 +27,7 @@ class FullTerminalUpdate(TerminalUpdate):
         width = self.camera.width
         height = self.camera.height
 
-        x_from, x_to, y_from, y_to = self.camera._frame(width, height)
+        frame = self.camera._frame(width, height)
 
         chars = np.full([width, height, self.world.LAYERS], SYMB_EMPTY, dtype=int)
         clrs = np.full([width, height, self.world.LAYERS], colors.transparent(), dtype=np.longlong)
@@ -38,8 +38,8 @@ class FullTerminalUpdate(TerminalUpdate):
 
         fov = self.fov(observers_in_frame)
 
-        for x in np.arange(x_from, x_to):
-            for y in np.arange(y_from, y_to):
+        for x in np.arange(frame.x_from, frame.x_to):
+            for y in np.arange(frame.y_from, frame.y_to):
                 x_screen, y_screen = self.camera.cells_to_screen(x, y)
                 if self.world.is_cell(x, y) and fov[x_screen, y_screen]:
                     cell_chars, cell_colors = self.world.cells[x, y].render()
@@ -70,8 +70,8 @@ class FullTerminalUpdate(TerminalUpdate):
 
         fov = np.full([self.camera.width, self.camera.height], False)
 
-        x_from, x_to, y_from, y_to = self.camera._frame(self.camera.width, self.camera.height)
-        mask = self.world.sight_mask(x_from, x_to, y_from, y_to)
+        frame = self.camera._frame(self.camera.width, self.camera.height)
+        mask = self.world.sight_mask(frame)
 
         for observer in observers:
             fov |= observer.fieldofview.fov(mask)

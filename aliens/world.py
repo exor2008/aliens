@@ -55,7 +55,10 @@ class World:
 
     def move_item(self, x, y, newx, newy, item):        
         self.cells[x, y].items.remove(item)
-        self.cells[newx, newy].items.append(item)  
+        self.cells[newx, newy].items.append(item)
+
+    def get_items_with_component(self, x, y, component):
+        return self.cells[x, y].get_items_with_component(component)
 
     @property
     def walk_mask(self):
@@ -68,15 +71,15 @@ class World:
                     mask[i, j] = 0
         return mask
 
-    def sight_mask(self, x_from, x_to, y_from, y_to):
-        width = x_to - x_from
-        height = y_to - y_from
+    def sight_mask(self, frame):
+        width = frame.x_to - frame.x_from
+        height = frame.y_to - frame.y_from
         mask = np.ones([width, height], dtype=bool)
-        for x in range(x_from, x_to):
-            for y in range(y_from, y_to):
+        for x in range(frame.x_from, frame.x_to):
+            for y in range(frame.y_from, frame.y_to):
                 if self.is_cell(x, y):
                     if self.cells[x, y].is_block_sight():
-                        mask[x - x_from, y - y_from] = 0
+                        mask[x - frame.x_from, y - frame.y_from] = 0
         return mask
 
     @property
@@ -127,10 +130,12 @@ class Cell:
     def render(self):
         chars = self._cell_char_buffer()
         colors = self._cell_color_buffer()
-        for item in self.items:
-            if hasattr(item, 'render'):
-                item.render.render(chars, colors)
+        for item in filter(lambda item: hasattr(item, 'render'), self.items):
+            item.render.render(chars, colors)
         return chars, colors
+
+    def get_items_with_component(self, component):
+        return list(filter(lambda item: hasattr(item, component), self.items))
 
 
 if __name__ == '__main__':

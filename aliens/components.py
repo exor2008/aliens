@@ -1,8 +1,11 @@
+from typing import Optional
+from dataclasses import dataclass
 from collections import OrderedDict
 
 import tcod
 import simpy
 import numpy as np
+from numba import jit
 from bearlibterminal import terminal
 
 from aliens import colors
@@ -10,6 +13,15 @@ from aliens.symbols import *
 from aliens.items import Item
 from aliens.tasks.tasks import GoToTask, IdleTask
 from aliens.terminal_updates import UpdateRequests
+
+
+@dataclass
+class Frame:
+    x_from: int
+    x_to: int
+    y_from: int
+    y_to: int
+
 
 class BaseComponent:
     def __init__(self, item: Item):
@@ -217,6 +229,7 @@ class DirectionComponent(Component):
     def cell_offset(self):
         return self.cells_offsets[self.direction]
 
+
 class FieldOfViewComponent(Component):
     def __init__(self, item: Item, camera: Item, radius: int):
         super().__init__(item, camera)
@@ -229,10 +242,10 @@ class FieldOfViewComponent(Component):
             x, y = mask.shape[0] // 2, mask.shape[1] // 2
         return tcod.map.compute_fov(mask, [x, y], radius=self.radius)
 
-    def fov(self, sight_mask=None, camera_relative=True):
-        x_from, x_to, y_from, y_to = self.camera.camera._frame(self.camera.camera.width, self.camera.camera.height)
+    def fov(self, sight_mask: np.ndarray = None, frame: Optional[Frame] = None, camera_relative: bool = True):
+        frame = frame if frame else self.camera.camera._frame(self.camera.camera.width, self.camera.camera.height)
         mask = sight_mask if sight_mask is not None else \
-            self.world.sight_mask(x_from, x_to, y_from, y_to)
+            self.world.sight_mask(frame)
 
         if hasattr(self.item, 'direction'):
             obs_mask = self.item.direction.mask(mask, camera_relative=camera_relative)
@@ -303,28 +316,28 @@ class CameraComponent(BaseComponent):
         y_from = y - int(round(height / 2))
         y_to = y_from + height
 
-        return x_from, x_to, y_from, y_to
+        return Frame(x_from, x_to, y_from, y_to)
 
     def in_frame(self, x, y, width=None, height=None):
         width = width if width else self.width
         height = height if height else self.height
 
-        x_from, x_to, y_from, y_to = self._frame(width, height)
-        return x_from <= x < x_to and y_from <= y < y_to
+        frame = self._frame(width, height)
+        return frame.x_from <= x < frame.x_to and frame.y_from <= y < frame.y_to
 
     def screen_to_cells(self, x, y, width=None, height=None):
         width = width if width else self.width
         height = height if height else self.height
 
-        x_from, x_to, y_from, y_to = self._frame(width, height)
-        return x + x_from, height - y + y_from - 1
+        frame = self._frame(width, height)
+        return x + frame.x_from, height - y + frame.y_from - 1
 
     def cells_to_screen(self, x, y, width=None, height=None):
         width = width if width else self.width
         height = height if height else self.height
 
-        x_from, x_to, y_from, y_to = self._frame(width, height)
-        return x - x_from, y - y_from
+        frame = self._frame(width, height)
+        return x - frame.x_from, y - frame.y_from
 
     def follow(self, item):
         if self.item.owner:
@@ -409,12 +422,18 @@ class HiveComponent(Component):
         alien.add_component(NavigateComponent, self.camera, speed=100.0)
         alien.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
         alien.add_component(FieldOfViewComponent, self.camera, radius=100)
-        # sensor component
-        # los component
+        alien.add_component(SensorComponent, self.camera)
 
         self.env.process(IdleTask(alien, priority=10, preempt=False).execute())
         self.aliens[alien.name] = alien
         return alien
+
+    def spawn_resource(self, x, y):
+        resource = Item('AlienResource', self.world, self.env)
+        resource.add_component(AlienResourceComponent, self.camera, 5)
+        resource.add_component(PositionComponent, self.camera, x, y)
+        resource.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
+        resource.add_component(RenderComponent, self.camera, 1, SYMB_ALIEN_RESOURCE, colors.predator_green())
 
 
 class PhysicalComponent(Component):
@@ -432,6 +451,33 @@ class AlienDroneComponent(Component):
 class SensorComponent(Component):
     def __init__(self, item: Item, camera: Item):
         super().__init__(item, camera)
+        self.fieldofview = self.item.fieldofview
 
     def scan(self, component):
-        pass
+        item_x, item_y = self.item.position.pos
+        radius = self.item.fieldofview.radius
+        x_from, x_to = item_x - radius, item_x + radius
+        y_from, y_to = item_y - radius, item_y + radius
+        frame = Frame(x_from, x_to, y_from, y_to)
+
+        visible = self.fieldofview.fov(frame=frame, camera_relative=False)
+
+        items = []
+        for x, y in fast_iterate_sensor(x_from, x_to, y_from, y_to, visible):
+            if self.world.is_cell(x, y):
+                _items = self.world.get_items_with_component(x, y, component)
+                items.extend(_items)
+        return items
+
+@jit(nopython=True)
+def fast_iterate_sensor(x_from, x_to, y_from, y_to, mask):
+    for x in range(x_from, x_to):
+        for y in range(y_from, y_to):
+            if mask[x - x_from, y - y_from]:
+                yield x, y
+
+
+class AlienResourceComponent(Component):
+    def __init__(self, item: Item, camera: Item, value):
+        super().__init__(item, camera)
+        self.value = value
