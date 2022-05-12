@@ -1,5 +1,6 @@
-from abc import ABC, abstractmethod
+from typing import Optional
 from functools import wraps
+from abc import ABC, abstractmethod
 
 import simpy
 import numpy as np
@@ -9,7 +10,7 @@ from aliens.items import Item
 
 
 class Task(ABC):
-    def __init__(self, item: Item, priority, preempt: bool = False):
+    def __init__(self, item: Item, priority: int, preempt: bool = False):
         self.item = item
         self.world = item.world
         self.env = item.env
@@ -23,26 +24,31 @@ class Task(ABC):
 
 
 class GoToTask(Task):
-    def __init__(self, item: Item, target_x: int, target_y: int, priority, preempt: bool = True):
+    def __init__(self, item: Item, target_x: int, target_y: int, 
+        priority, preempt: bool = True, path: Optional[np.ndarray] = None):
+
         super().__init__(item, priority, preempt)
         self.target_x = target_x
         self.target_y = target_y
-        self._path = None
+        self._path = path
 
     def execute(self):
         with self.actor.request(priority=self.priority, preempt=self.preempt) as req:
             try:
                 yield req
                 current_x, current_y = self.item.position.pos
-                try:
-                    while (self.target_x, self.target_y) != (current_x, current_y):
-                        for current_x, current_y in self.next_dest():
-                            yield self.env.process(
-                                MoveTask(self.item, current_x, current_y).execute())
-                except UnreachableDestination:
-                    pass
+
+                while (self.target_x, self.target_y) != (current_x, current_y):
+                    for current_x, current_y in self.next_dest():
+                        yield self.env.process(
+                            MoveTask(self.item, current_x, current_y).execute())
+
+            except UnreachableDestination:
+                return False
             except simpy.Interrupt as interrupt:
-                pass
+                return False
+            else:
+                return True
 
     @property
     def path(self):

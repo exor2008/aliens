@@ -21,6 +21,11 @@ class Item:
 
     def add_item(self, item):
         self.items.append(item)
+        item.owner = self
+        if hasattr(self, 'position') and hasattr(item, 'position'):
+            item.position.move(*self.position.pos)
+        if hasattr(item, 'render'):
+            item.render.visible = False
 
     def remove_item(self, item):
         if item in self.items:

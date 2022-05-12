@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 from dataclasses import dataclass
 from collections import OrderedDict
@@ -7,13 +8,17 @@ import simpy
 import numpy as np
 from numba import jit
 from bearlibterminal import terminal
+from scipy.spatial.distance import cdist
 
 from aliens import colors
 from aliens.symbols import *
 from aliens.items import Item
 from aliens.tasks.tasks import GoToTask, IdleTask
+from aliens.tasks.alien_drone_tasks import CollectResourceTask
 from aliens.terminal_updates import UpdateRequests
+from aliens.logging_helper import get_logger
 
+logger = get_logger('aliens.components', logging.DEBUG)
 
 @dataclass
 class Frame:
@@ -61,6 +66,20 @@ class PositionComponent(Component):
     @property
     def pos(self):
         return self.x, self.y
+
+
+class InteractComponent(Component):
+    def pickup(self, item):
+        self.item.add_item(item)
+
+    def release(self, item):
+        self.item.remove_item(item)
+
+    def destroy(self, item):
+        self.release(item)
+        self.world.remove_item(item)
+
+    #TODO: drop item
 
 
 class DirectionComponent(Component):
@@ -209,7 +228,7 @@ class DirectionComponent(Component):
 
     @property
     def cw(self):
-        directions = list(directions.values())
+        directions = list(self.directions.values())
         current = directions.index(self.direction)
         current += 1
         if current >= len(directions):
@@ -218,7 +237,7 @@ class DirectionComponent(Component):
 
     @property
     def ccw(self):
-        directions = list(directions.values())
+        directions = list(self.directions.values())
         current = directions.index(self.direction)
         current -= 1
         if current < 0:
@@ -226,7 +245,7 @@ class DirectionComponent(Component):
         return directions[current]
 
     @property
-    def cell_offset(self):
+    def cell_in_front(self):
         return self.cells_offsets[self.direction]
 
 
@@ -267,13 +286,17 @@ class RenderComponent(Component):
         'd': SYMB_D,
         }
 
-    def __init__(self, item: Item, camera: Item, layer: int, symbol: int, color: int):
+    def __init__(self, item: Item, camera: Item, layer: int, symbol: int, color: int, visible: bool = True):
         super().__init__(item, camera)
         self.layer = layer
         self.symbol = symbol
         self._color = color
+        self.visible = visible
 
     def render(self, chars, clrs):
+        if not self.visible:
+            return
+
         chars[self.layer] = self.symbol
         clrs[self.layer] = self.color
         if hasattr(self.item, 'direction'):
@@ -342,9 +365,7 @@ class CameraComponent(BaseComponent):
     def follow(self, item):
         if self.item.owner:
             self.item.owner.remove_item(self.item)
-        self.item.owner = item
-        self.item.owner.add_item(self.item)
-        self.item.position.move(*item.position.pos)
+        item.add_item(self.item)
 
 
 class NavigateComponent(Component):
@@ -378,7 +399,7 @@ class MarinesManagerComponent(Component):
         marine.add_component(RenderComponent, self.camera, 1, SYMB_MARINE, colors.predator_green())
         marine.add_component(ActorComponent, self.camera)
         marine.add_component(DirectionComponent, self.camera, direction=direction)
-        marine.add_component(NavigateComponent, self.camera, speed=100.0)
+        marine.add_component(NavigateComponent, self.camera, speed=1.0)
         marine.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
         marine.add_component(FieldOfViewComponent, self.camera, radius=100)
 
@@ -411,7 +432,7 @@ class HiveComponent(Component):
     def __init__(self, item: Item, camera: Item):        
         super().__init__(item, camera)
         self.aliens = OrderedDict()
-        self.mass = 0
+        self._mass = 0
 
     def spawn_alien_drone(self, x, y):
         alien = Item('AlienDrone', self.world, self.env)
@@ -419,12 +440,14 @@ class HiveComponent(Component):
         alien.add_component(RenderComponent, self.camera, 1, SYMB_ALIEN, colors.light_blue())
         alien.add_component(ActorComponent, self.camera)
         alien.add_component(DirectionComponent, self.camera)
-        alien.add_component(NavigateComponent, self.camera, speed=100.0)
+        alien.add_component(NavigateComponent, self.camera, speed=2.0)
         alien.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
         alien.add_component(FieldOfViewComponent, self.camera, radius=100)
         alien.add_component(SensorComponent, self.camera)
+        alien.add_component(AlienDroneComponent, self.camera, self)
+        alien.add_component(InteractComponent, self.camera)
 
-        self.env.process(IdleTask(alien, priority=10, preempt=False).execute())
+        self.env.process(CollectResourceTask(alien, priority=10, preempt=False).execute())
         self.aliens[alien.name] = alien
         return alien
 
@@ -432,8 +455,16 @@ class HiveComponent(Component):
         resource = Item('AlienResource', self.world, self.env)
         resource.add_component(AlienResourceComponent, self.camera, 5)
         resource.add_component(PositionComponent, self.camera, x, y)
-        resource.add_component(PhysicalComponent, self.camera, block_pass=True, block_sight=True)
+        resource.add_component(PhysicalComponent, self.camera, block_pass=False, block_sight=True)
         resource.add_component(RenderComponent, self.camera, 1, SYMB_ALIEN_RESOURCE, colors.predator_green())
+
+    @property
+    def mass(self):
+        return self._mass
+
+    @mass.setter
+    def mass(self, value):
+        self._mass = value    
 
 
 class PhysicalComponent(Component):
@@ -444,8 +475,21 @@ class PhysicalComponent(Component):
 
 
 class AlienDroneComponent(Component):
-    def __init__(self, item: Item, camera: Item):
+    def __init__(self, item: Item, camera: Item, hive: Item):
         super().__init__(item, camera)
+        self.hive = hive
+        self.resource: Optional[Item] = None
+
+    def pickup_resource(self, item):
+        if self.resource:
+            self.release_resource()
+        self.item.interact.pickup(item)
+        self.resource = item
+
+    def destroy_resource(self):
+        if self.resource:
+            self.item.interact.destroy(self.resource)
+            self.resource = None
 
 
 class SensorComponent(Component):
@@ -453,7 +497,7 @@ class SensorComponent(Component):
         super().__init__(item, camera)
         self.fieldofview = self.item.fieldofview
 
-    def scan(self, component):
+    def _scan(self, component: str):
         item_x, item_y = self.item.position.pos
         radius = self.item.fieldofview.radius
         x_from, x_to = item_x - radius, item_x + radius
@@ -467,6 +511,18 @@ class SensorComponent(Component):
             if self.world.is_cell(x, y):
                 _items = self.world.get_items_with_component(x, y, component)
                 items.extend(_items)
+        return items
+
+    def sort(self, items):
+        xy = [item.position.pos for item in items]
+        dist = cdist([self.item.position.pos], xy)
+        sorted_items = sorted(zip(items, dist[0]), key=lambda args: args[1])
+        return [item_dist[0] for item_dist in sorted_items]
+
+    def scan(self, component: str, sort=True):
+        items = self._scan(component)
+        if items and sort:
+            items = self.sort(items)
         return items
 
 @jit(nopython=True)

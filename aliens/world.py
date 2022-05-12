@@ -50,8 +50,10 @@ class World:
     def add_item(self, x, y, item):
         self.cells[x, y].items.append(item)
 
-    def remove_item(self, x, y, item):
-        self.cells[x, y].items.remove(item)
+    def remove_item(self, item):
+        cell = self.cells[item.position.pos]
+        if item in cell.items:
+            cell.items.remove(item)
 
     def move_item(self, x, y, newx, newy, item):        
         self.cells[x, y].items.remove(item)
@@ -91,8 +93,7 @@ class World:
             0 <= y < self.cells.shape[1]
 
     def is_block_pass(self, x, y):
-        return not self.is_cell(x, y) and self.cells[x, y].is_block_pass()
-
+        return not self.is_cell(x, y) or self.cells[x, y].is_block_pass()
 
 @dataclass(repr=False)
 class Cell:
