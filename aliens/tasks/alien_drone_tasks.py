@@ -9,7 +9,7 @@ from aliens.tasks.tasks import Task, GoToTask, MoveTask
 
 INTERACT_RESOURCE_TIME = .5
 
-logger = get_logger('aliens.tasks.alien_drone', logging.DEBUG)
+logger = get_logger('aliens.tasks.alien_drone', logging.INFO)
 
 
 class CollectResourceTask(Task):
@@ -82,7 +82,7 @@ class SearchResourceTask(Task):
         logger.debug('SearchResourceTask begins')
         try:
             while True:
-                yield self.env.timeout(1)
+                yield self.env.timeout(5)
                 items = self.item.sensor.scan('alienresource')
                 if items:
                     logger.debug('Resource found')

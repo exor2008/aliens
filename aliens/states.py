@@ -254,7 +254,7 @@ class NewGameState(GameState):
         return MarineControlState(self.store)
 
     def _init_world(self):
-        self.world = World(50, 50)
+        self.world = World(100, 100)
         self.env = StoppableRealtimeEnvironment(strict=False)
 
         self.store['world'] = self.world
@@ -313,7 +313,10 @@ class NewGameState(GameState):
 
         # for x, y in np.random.randint(-3, 3, size=[1, 2]):
         #     self.hive.hive.spawn_alien_drone(hx + x, hy + y)
-        alien = self.hive.hive.spawn_alien_drone(20, 30)
+        for i in range(50):
+            alien = self.hive.hive.spawn_alien_drone(25, i+1)
+
+        alien = self.hive.hive.spawn_alien_drone(99, 99)
         self.camera.camera.follow(alien)
 
     def _init_resources(self):
@@ -333,7 +336,7 @@ class MarineControlState(GameState):
         ###
         marines_list = self.marines.marinesmanager.marines.values()
         self.camera.camera.update_requests.full()
-        self.render(list(marines_list) + list(aliens_list))
+        self.render(list(marines_list))# + list(aliens_list))
 
         self.handlers += InputHandlers({
             terminal.TK_MOUSE_LEFT | terminal.TK_KEY_RELEASED: self.on_click
@@ -354,7 +357,7 @@ class MarineControlState(GameState):
         aliens_list = self.hive.hive.aliens.values()
 
         marines_list = self.marines.marinesmanager.marines.values()
-        self.render(list(marines_list) + list(aliens_list))
+        self.render(list(marines_list) + [list(aliens_list)[-1]])
 
         return self
 

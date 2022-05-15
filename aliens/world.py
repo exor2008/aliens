@@ -1,6 +1,7 @@
-from typing import List, Dict
 from queue import deque
+from typing import List, Dict
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 import numpy as np
 from numba import jit
@@ -88,6 +89,7 @@ class World:
     def shape(self):
         return self.cells.shape
 
+    @lru_cache(maxsize=1000*1000)
     def is_cell(self, x, y):
         return 0 <= x < self.cells.shape[0] and \
             0 <= y < self.cells.shape[1]
