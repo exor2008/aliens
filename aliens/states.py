@@ -18,6 +18,9 @@ from aliens.components import (
     HiveComponent,
 )
 
+from aliens.profiler import dump
+
+
 class StateMashine:
     def __init__(self):
         self.store = {}
@@ -195,6 +198,7 @@ class MainMenuState(MenuState):
         return NewGameState(self.store)
 
     def on_exit(self):
+        dump()
         return
 
 

@@ -331,7 +331,7 @@ class CameraComponent(BaseComponent):
         if updater := self.update_requests.get_updater():
             updater.update(observers)
 
-    def _frame(self, width, height):        
+    def _frame(self, width, height):
         x, y = self.item.position.pos
 
         x_from = x - int(round(width / 2))

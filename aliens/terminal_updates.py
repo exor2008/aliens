@@ -6,6 +6,7 @@ from bearlibterminal import terminal
 
 from aliens.symbols import *
 from aliens import colors
+from aliens.profiler import pr
 
 
 class TerminalUpdate(ABC):
@@ -49,6 +50,8 @@ class FullTerminalUpdate(TerminalUpdate):
         return chars, clrs
 
     def update(self, observers):
+        pr.enable()
+
         chars, colors = self.render(observers)
 
         terminal.clear()
@@ -56,13 +59,18 @@ class FullTerminalUpdate(TerminalUpdate):
         size_x, size_y, _ = chars.shape
 
         chars_colors = np.dstack([chars, colors])
+        prev_color = None
         for x, y, char, color in fast_iterate(chars_colors):
-            terminal.color(color)
+            if color != prev_color:
+                prev_color = color
+                terminal.color(color)
             terminal.put(x, y, char)
         terminal.composition(False)
         terminal.refresh()
 
         self.need_update = False
+
+        pr.disable()
 
     def fov(self, observers):
         if not observers:
